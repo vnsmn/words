@@ -7,13 +7,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Properties;
 import java.util.TreeSet;
-import java.util.logging.SimpleFormatter;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
@@ -47,6 +45,7 @@ public class WordBuilder {
                 .addOption(OptionAdapter.PREFIX.createOption())
                 .addOption(OptionAdapter.SUFFIX.createOption())
                 .addOption(OptionAdapter.FILTER.createOption())
+                .addOption(OptionAdapter.LINE_NUMBERING.createOption())
                 .addOption(OptionAdapter.SIZE.createOption()), args);
         String cfile = OptionAdapter.CONFIG_FILE.getOptionValue(line);
         String sfile = OptionAdapter.SOURCE_FILE.getOptionValue(line);
@@ -54,6 +53,7 @@ public class WordBuilder {
         String preffix = OptionAdapter.PREFIX.getOptionValue(line);
         String suffix = OptionAdapter.SUFFIX.getOptionValue(line);
         String filter = OptionAdapter.FILTER.getOptionValue(line);
+        String flnumb = OptionAdapter.LINE_NUMBERING.getOptionValue(line);
         String size = OptionAdapter.SIZE.getOptionValue(line);
         if (StringUtils.isBlank(cfile)) {
             throw new WordExeption("The cfile is empty.");
@@ -82,6 +82,9 @@ public class WordBuilder {
         if (StringUtils.isBlank(filter)) {
             filter = properties.getProperty(OptionAdapter.FILTER.name);
         }
+        if (StringUtils.isBlank(flnumb)) {
+            flnumb = properties.getProperty(OptionAdapter.LINE_NUMBERING.name);
+        }
         if (StringUtils.isBlank(size)) {
             size = properties.getProperty(OptionAdapter.SIZE.name);
         }
@@ -91,14 +94,16 @@ public class WordBuilder {
         log.info("prefix=" + preffix);
         log.info("suffix=" + suffix);
         log.info("filter=" + filter);
+        log.info("flnumb=" + flnumb);
         log.info("size=" + size);
         //log.info("character=" + Integer.toHexString(Character.codePointAt("\n", 0)));
-        new WordBuilder().execute(sfile, tfile, preffix, suffix, filter, size);
+        new WordBuilder().execute(sfile, tfile, preffix, suffix, filter, Boolean.valueOf(flnumb), size);
 
         log.info("***** finish executing the main method *****");
     }
 
-    private void execute(String sfile, String tfile, String prefix, String suffix, String filter, String size) throws IOException {
+    private void execute(String sfile, String tfile, String prefix, String suffix, String filter,
+                         boolean isLineNumber, String size) throws IOException {
         try (FileInputStream fis = new FileInputStream(sfile)) {
             Collection<String> ws = WordParser.parse(fis, filter);
             log.info("all words=" + ws.size());
@@ -117,15 +122,17 @@ public class WordBuilder {
             int pos = 0;
             String suffix2 = convertHexToString(suffix);
             String prefix2 = convertHexToString(prefix);
+            int num = 1;
             for (String wd : sortWords) {
-                String newRow = ret + prefix2 + wd + suffix2;
+                String newRow = ret + (isLineNumber ? num : "") + prefix2 + wd + suffix2;
                 if (newRow.length() > maxCharset) {
                     flush(ret, resFile + "." + numberFormat.format(pos) + ".txt");
                     pos++;
-                    ret = prefix2 + wd + suffix2;
+                    ret = (isLineNumber ? num : "") + prefix2 + wd + suffix2;
                 } else {
                     ret = newRow;
                 }
+                num++;
             }
             flush(ret, resFile + "." + numberFormat.format(pos) + ".txt");
         }
@@ -162,6 +169,7 @@ public class WordBuilder {
         PREFIX("prefix"),
         SUFFIX("suffix"),
         FILTER("filter"),
+        LINE_NUMBERING("flaglnumb"),
         SIZE("size");
 
         OptionAdapter(String name) {
