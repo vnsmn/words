@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.List;
 import java.util.Properties;
 import java.util.TreeSet;
 import org.apache.commons.cli.CommandLine;
@@ -46,6 +48,7 @@ public class WordBuilder {
                 .addOption(OptionAdapter.SUFFIX.createOption())
                 .addOption(OptionAdapter.FILTER.createOption())
                 .addOption(OptionAdapter.LINE_NUMBERING.createOption())
+                .addOption(OptionAdapter.TEXT.createOption())
                 .addOption(OptionAdapter.SIZE.createOption()), args);
         String cfile = OptionAdapter.CONFIG_FILE.getOptionValue(line);
         String sfile = OptionAdapter.SOURCE_FILE.getOptionValue(line);
@@ -54,6 +57,7 @@ public class WordBuilder {
         String suffix = OptionAdapter.SUFFIX.getOptionValue(line);
         String filter = OptionAdapter.FILTER.getOptionValue(line);
         String flnumb = OptionAdapter.LINE_NUMBERING.getOptionValue(line);
+        String ftext = OptionAdapter.TEXT.getOptionValue(line);
         String size = OptionAdapter.SIZE.getOptionValue(line);
         if (StringUtils.isBlank(cfile)) {
             throw new WordExeption("The cfile is empty.");
@@ -85,6 +89,9 @@ public class WordBuilder {
         if (StringUtils.isBlank(flnumb)) {
             flnumb = properties.getProperty(OptionAdapter.LINE_NUMBERING.name);
         }
+        if (StringUtils.isBlank(ftext)) {
+            ftext = properties.getProperty(OptionAdapter.TEXT.name);
+        }
         if (StringUtils.isBlank(size)) {
             size = properties.getProperty(OptionAdapter.SIZE.name);
         }
@@ -94,26 +101,35 @@ public class WordBuilder {
         log.info("prefix=" + preffix);
         log.info("suffix=" + suffix);
         log.info("filter=" + filter);
-        log.info("flnumb=" + flnumb);
+        log.info("flaglnumb=" + flnumb);
+        log.info("flagtext=" + ftext);
         log.info("size=" + size);
         //log.info("character=" + Integer.toHexString(Character.codePointAt("\n", 0)));
-        new WordBuilder().execute(sfile, tfile, preffix, suffix, filter, Boolean.valueOf(flnumb), size);
+        new WordBuilder().execute(sfile, tfile, preffix, suffix, filter,
+                Boolean.valueOf(flnumb), Boolean.valueOf(ftext), size);
 
         log.info("***** finish executing the main method *****");
     }
 
     private void execute(String sfile, String tfile, String prefix, String suffix, String filter,
-                         boolean isLineNumber, String size) throws IOException {
+                         boolean isLineNumber, boolean isText, String size) throws IOException {
         try (FileInputStream fis = new FileInputStream(sfile)) {
-            Collection<String> ws = WordParser.parse(fis, filter);
-            log.info("all words=" + ws.size());
-            TreeSet<String> sortWords = new TreeSet<>(new Comparator<String>(){
-                @Override
-                public int compare(String o1, String o2) {
-                    return o1.compareTo(o2);
-                }
-            });
-            sortWords.addAll(ws);
+            List<String> sortWords;
+            if (!isText) {
+                Collection<String> ws = WordParser.parseWords(fis, filter);
+                log.info("all words=" + ws.size());
+                TreeSet<String> sortUniqWords = new TreeSet<>(new Comparator<String>() {
+                    @Override
+                    public int compare(String o1, String o2) {
+                        return o1.compareTo(o2);
+                    }
+                });
+                sortUniqWords.addAll(ws);
+                sortWords = new ArrayList<>(sortUniqWords);
+            } else {
+                List<String> ws = WordParser.parseText(fis, filter);
+                sortWords = new ArrayList<>(ws);
+            }
             String ret = "";
             String groupFileMarker = dateFormat.format(new Date());
             String resFile = (StringUtils.isBlank(tfile) ? sfile : tfile) +
@@ -170,6 +186,7 @@ public class WordBuilder {
         SUFFIX("suffix"),
         FILTER("filter"),
         LINE_NUMBERING("flaglnumb"),
+        TEXT("flagtext"),
         SIZE("size");
 
         OptionAdapter(String name) {

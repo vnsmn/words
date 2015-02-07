@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StreamTokenizer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
@@ -20,7 +21,7 @@ public class WordParser {
 	 * This method doesn't close stream of "in" (see argument "in" of
 	 * InputStream class)
 	 */
-	static public Collection<String> parse(InputStream in, String filter) throws IOException {
+	static public Collection<String> parseWords(InputStream in, String filter) throws IOException {
 		Reader r = new BufferedReader(new InputStreamReader(in));
 		StreamTokenizer st = new StreamTokenizer(r);
         st.wordChars(Character.codePointAt("'", 0), Character.codePointAt("'", 0));
@@ -36,7 +37,8 @@ public class WordParser {
 				break;
 			case StreamTokenizer.TT_WORD:
                 if (!StringUtils.isBlank(st.sval)) {
-                    words.add(filter(filter, st.sval).toLowerCase());
+                    String s = st.sval.replaceAll("  ", " ");
+                    words.add(filter(filter, s).toLowerCase());
                 }
 				break;
 			case StreamTokenizer.TT_NUMBER:
@@ -47,6 +49,17 @@ public class WordParser {
 		} while (!eof);
 		return words;
 	}
+
+    static public List<String> parseText(InputStream in, String filter) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(in));
+        StringBuilder sb = new StringBuilder();
+        for (String s = br.readLine(); s != null; s = br.readLine()) {
+            s = s.replaceAll("  ", " ").replaceAll("[.] ", ".").replaceAll(" [.]", ".");
+            sb.append(s.trim());
+        }
+        String[] ret = filter(filter, sb.toString()).split("[.]");
+        return Arrays.asList(ret);
+    }
 
     static private String filter(String pattern, String s) {
         return s.replaceAll(pattern, "");
