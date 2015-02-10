@@ -11,9 +11,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
-import java.util.TreeSet;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
@@ -48,91 +48,109 @@ public class WordBuilder {
                 .addOption(OptionAdapter.SUFFIX.createOption())
                 .addOption(OptionAdapter.FILTER.createOption())
                 .addOption(OptionAdapter.TEXT.createOption())
+                .addOption(OptionAdapter.SORT.createOption())
+                .addOption(OptionAdapter.UNIQUE.createOption())
                 .addOption(OptionAdapter.SIZE.createOption()), args);
-        String cfile = OptionAdapter.CONFIG_FILE.getOptionValue(line);
-        String sfile = OptionAdapter.SOURCE_FILE.getOptionValue(line);
-        String tfile = OptionAdapter.TARGET_FILE.getOptionValue(line);
-        String preffix = OptionAdapter.PREFIX.getOptionValue(line);
-        String suffix = OptionAdapter.SUFFIX.getOptionValue(line);
-        String filter = OptionAdapter.FILTER.getOptionValue(line);
-        String ftext = OptionAdapter.TEXT.getOptionValue(line);
-        String size = OptionAdapter.SIZE.getOptionValue(line);
-        if (StringUtils.isBlank(cfile)) {
+        DataConfig dataConfig = new DataConfig();
+        dataConfig.cnfFile = OptionAdapter.CONFIG_FILE.getOptionValue(line);
+        dataConfig.srcFile = OptionAdapter.SOURCE_FILE.getOptionValue(line);
+        dataConfig.trgFile = OptionAdapter.TARGET_FILE.getOptionValue(line);
+        dataConfig.prefix = OptionAdapter.PREFIX.getOptionValue(line);
+        dataConfig.suffix = OptionAdapter.SUFFIX.getOptionValue(line);
+        dataConfig.filter = OptionAdapter.FILTER.getOptionValue(line);
+        dataConfig.isText = OptionAdapter.TEXT.getBooleanOptionValue(line);
+        dataConfig.isSort = OptionAdapter.SORT.getBooleanOptionValue(line);
+        dataConfig.isUnique = OptionAdapter.UNIQUE.getBooleanOptionValue(line);
+        dataConfig.size = OptionAdapter.SIZE.getLongOptionValue(line);
+        if (StringUtils.isBlank(dataConfig.cnfFile)) {
             throw new WordExeption("The cfile is empty.");
         }
         Properties properties = new Properties();
-        if (new File(cfile).exists()) {
-            try (FileInputStream fis = new FileInputStream(cfile)) {
+        if (new File(dataConfig.cnfFile).exists()) {
+            try (FileInputStream fis = new FileInputStream(dataConfig.cnfFile)) {
                 properties.load(fis);
             }
         } else {
-            InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(cfile);
+            InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(dataConfig.cnfFile);
             properties.load(is);
         }
-        if (StringUtils.isBlank(sfile)) {
-            sfile = properties.getProperty(OptionAdapter.SOURCE_FILE.getOptionName());
+        if (StringUtils.isBlank(dataConfig.srcFile)) {
+            dataConfig.srcFile = properties.getProperty(OptionAdapter.SOURCE_FILE.getOptionName());
         }
-        if (StringUtils.isBlank(tfile)) {
-            tfile = properties.getProperty(OptionAdapter.TARGET_FILE.getOptionName());
+        if (StringUtils.isBlank(dataConfig.trgFile)) {
+            dataConfig.trgFile = properties.getProperty(OptionAdapter.TARGET_FILE.getOptionName());
         }
-        if (StringUtils.isBlank(preffix)) {
-            preffix = properties.getProperty(OptionAdapter.PREFIX.getOptionName());
+        if (StringUtils.isBlank(dataConfig.prefix)) {
+            dataConfig.prefix = properties.getProperty(OptionAdapter.PREFIX.getOptionName());
         }
-        if (StringUtils.isBlank(suffix)) {
-            suffix = properties.getProperty(OptionAdapter.SUFFIX.getOptionName());
+        if (StringUtils.isBlank(dataConfig.suffix)) {
+            dataConfig.suffix = properties.getProperty(OptionAdapter.SUFFIX.getOptionName());
         }
-        if (StringUtils.isBlank(filter)) {
-            filter = properties.getProperty(OptionAdapter.FILTER.name);
+        if (StringUtils.isBlank(dataConfig.filter)) {
+            dataConfig.filter = properties.getProperty(OptionAdapter.FILTER.name);
         }
-        if (StringUtils.isBlank(ftext)) {
-            ftext = properties.getProperty(OptionAdapter.TEXT.name);
+        if (dataConfig.isText == null) {
+            dataConfig.isText = Boolean.valueOf(properties.getProperty(OptionAdapter.TEXT.name, "false"));
         }
-        if (StringUtils.isBlank(size)) {
-            size = properties.getProperty(OptionAdapter.SIZE.name);
+        if (dataConfig.isSort == null) {
+            dataConfig.isSort = Boolean.valueOf(properties.getProperty(OptionAdapter.SORT.name, "false"));
+        }
+        if (dataConfig.isUnique == null) {
+            dataConfig.isUnique = Boolean.valueOf(properties.getProperty(OptionAdapter.UNIQUE.name, "false"));
+        }
+        if (dataConfig.size == null) {
+            dataConfig.size = Long.valueOf(properties.getProperty(OptionAdapter.SIZE.name, "" + Long.MAX_VALUE));
         }
         log.info("***** CONFIG *****");
-        log.info("sfile=" + sfile);
-        log.info("tfile=" + tfile);
-        log.info("prefix=" + preffix);
-        log.info("suffix=" + suffix);
-        log.info("filter=" + filter);
-        log.info("flagtext=" + ftext);
-        log.info("size=" + size);
+        log.info("sfile=" + dataConfig.srcFile);
+        log.info("tfile=" + dataConfig.trgFile);
+        log.info("prefix=" + dataConfig.prefix);
+        log.info("suffix=" + dataConfig.suffix);
+        log.info("filter=" + dataConfig.filter);
+        log.info("mode.text=" + dataConfig.isText);
+        log.info("mode.isSort=" + dataConfig.isSort);
+        log.info("mode.isUnique=" + dataConfig.isUnique);
+        log.info("size=" + dataConfig.size);
         //log.info("character=" + Integer.toHexString(Character.codePointAt("\n", 0)));
-        new WordBuilder().execute(sfile, tfile, preffix, suffix, filter,
-                Boolean.valueOf(ftext), size);
+        new WordBuilder().execute(dataConfig);
 
         log.info("***** finish executing the main method *****");
     }
 
-    private void execute(String sfile, String tfile, String prefix, String suffix, String filter,
-                         boolean isText, String size) throws IOException {
-        try (FileInputStream fis = new FileInputStream(sfile)) {
+    private void execute(DataConfig dataConfig) throws IOException {
+        try (FileInputStream fis = new FileInputStream(dataConfig.srcFile)) {
             List<String> sortWords;
-            if (!isText) {
-                Collection<String> ws = WordParser.parseWords(fis, filter);
+            if (!dataConfig.isText) {
+                Collection<String> ws = WordParser.parseWords(fis, dataConfig.filter);
                 log.info("all words=" + ws.size());
-                TreeSet<String> sortUniqWords = new TreeSet<>(new Comparator<String>() {
-                    @Override
-                    public int compare(String o1, String o2) {
-                        return o1.compareTo(o2);
-                    }
-                });
-                sortUniqWords.addAll(ws);
-                sortWords = new ArrayList<>(sortUniqWords);
+                if (dataConfig.isUnique) {
+                    LinkedHashSet<String> uniqWords = new LinkedHashSet<>();
+                    uniqWords.addAll(ws);
+                    sortWords = new ArrayList<>(uniqWords);
+                } else {
+                    sortWords = new ArrayList<>(ws);
+                }
+                if (dataConfig.isSort) {
+                    sortWords.sort(new Comparator<String>() {
+                        @Override
+                        public int compare(String o1, String o2) {
+                            return o1.compareTo(o2);
+                        }
+                    });
+                }
             } else {
-                List<String> ws = WordParser.parseText(fis, filter);
+                List<String> ws = WordParser.parseText(fis, dataConfig.filter);
                 sortWords = new ArrayList<>(ws);
             }
             String ret = "";
             String groupFileMarker = dateFormat.format(new Date());
-            String resFile = (StringUtils.isBlank(tfile) ? sfile : tfile) +
+            String resFile = (StringUtils.isBlank(dataConfig.trgFile) ? dataConfig.srcFile : dataConfig.trgFile) +
                 "." + groupFileMarker;
-            long maxCharset = StringUtils.isEmpty(size) ? Long.MAX_VALUE : Long.parseLong(size);
+            long maxCharset = dataConfig.size;
             CycleState cycleState = new CycleState();
             for (String wd : sortWords) {
-                String suffix2 = toViewString(suffix, cycleState);
-                String prefix2 = toViewString(prefix, cycleState);
+                String suffix2 = toViewString(dataConfig.suffix, cycleState);
+                String prefix2 = toViewString(dataConfig.prefix, cycleState);
                 String newRow = ret + prefix2 + wd + suffix2;
                 if (newRow.length() > maxCharset) {
                     flush(ret, resFile + "." + numberFormat.format(cycleState.flushNumber) + ".txt");
@@ -159,7 +177,7 @@ public class WordBuilder {
     /**
      * Convert special symbols to string. splitter is ','
      * @param s is array of number of hex radix
-     * @return
+     * @return view String
      */
     private String toViewString(String s, CycleState state) {
         String ret = "";
@@ -183,6 +201,19 @@ public class WordBuilder {
         int flushNumber;
     }
 
+    static private class DataConfig {
+        String cnfFile;
+        String srcFile;
+        String trgFile;
+        String prefix;
+        String suffix;
+        String filter;
+        Boolean isText;
+        Boolean isSort;
+        Boolean isUnique;
+        Long size;
+    }
+
     private enum OptionAdapter {
         CONFIG_FILE("file.cnf", "config.properties"),
         SOURCE_FILE("file.src"),
@@ -191,6 +222,8 @@ public class WordBuilder {
         SUFFIX("suffix"),
         FILTER("filter"),
         TEXT("mode.text"),
+        SORT("mode.sort"),
+        UNIQUE("mode.unique"),
         SIZE("size");
 
         OptionAdapter(String name) {
@@ -204,6 +237,16 @@ public class WordBuilder {
 
         public String getOptionValue(CommandLine commandLine) {
             return commandLine.getOptionValue(name, defValue);
+        }
+
+        public Boolean getBooleanOptionValue(CommandLine commandLine) {
+            String s = getOptionValue(commandLine);
+            return StringUtils.isBlank(s) ? null : Boolean.valueOf(s.trim());
+        }
+
+        public Long getLongOptionValue(CommandLine commandLine) {
+            String s = getOptionValue(commandLine);
+            return StringUtils.isBlank(s) ? null : Long.valueOf(s.trim());
         }
 
         public String getOptionName() {
